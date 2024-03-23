@@ -1,0 +1,9 @@
+{
+    "_id": ObjectId,
+    "user_id": ObjectId,  // Reference to the user who made the expense
+    "amount": "number",
+    "description": "string",
+    "category": "string",
+    "date": "datetime",
+    "created_at": "datetime"
+}
