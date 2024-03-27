@@ -1,33 +1,23 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, abort
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from flask_restx import Api, Resource, Namespace, fields
 from pymongo import MongoClient
 from bson import ObjectId
 from datetime import datetime, timedelta
 import bcrypt
-import json
 
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '7eed3b8d-b4a8-4aa5-bc9c-dc0eea04ac33' # used uuid
 app.config["JWT_SECRET_KEY"] = '7eed3b8d-b4a8-4aa5-bc9c-dc0eea04ac33'
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(days=1)
-app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
+
 jwt = JWTManager(app)
-
-api = Api(app, version='1.0', title='Expense Guard', decription='API for expense tracker')
-
+api = Api(app, version='1.0', title='API - Expense Guard',
+        decription='API for expense tracker')
 
 mongo = MongoClient("mongodb://192.168.56.1:27017")
 db = mongo['expense_tracker']
-
-
-@app.errorhandler(400)
-@app.errorhandler(401)
-@app.errorhandler(404)
-@app.errorhandler(500)
-def error_handler(error):
-    return jsonify({"error": str(error)}), error.code
 
 
 def validate_user(data):
@@ -40,7 +30,7 @@ def validate_user(data):
 def validate_expense(data):
     required = ['decscription', 'amount', 'category', 'date']
     for field in required:
-        if field not in field:
+        if field not in data:
             return False
     return True
 
@@ -66,6 +56,7 @@ expense_model = api.model('Expense', {
 })
 
 expense_output = api.model('Expense_output', {
+    '_id': fields.String,
     'user_id': fields.String,
     'description': fields.String,
     'amount': fields.Float,
@@ -73,10 +64,24 @@ expense_output = api.model('Expense_output', {
     'date': fields.DateTime,
 })
 
+authorizations = {
+        'JWT-token': {
+            'type': 'apiKey',
+            'in': ['headers', 'cookies'],
+            'name': 'Authorization'
+        }
+}
+
 ns_auth = Namespace('api/v1', decription='Authorization')
 
-@ns_auth.route('/auth', methods=['POST'], strict_slashes=False)
+login_input = api.model('login_input', {
+    'username': fields.String(required=True),
+    'password': fields.String(required=True),
+})
+
+@ns_auth.route('/auth')
 class Authorization(Resource):
+    @ns_auth.expect(login_input)
     def post(self):
         data = ns_auth.payload
         username = data.get('username')
@@ -89,23 +94,25 @@ class Authorization(Resource):
                 user_id = str(user.get('_id'))
                 if bcrypt.checkpw(password.encode('utf-8'), hashed_password):
                     access_token = create_access_token(identity=user_id)
-                    return jsonify({'access_token': access_token}), 200
+                    return {'access_token': access_token}, 200
                 else:
-                    return jsonify({'message': 'Invalid username or password'}), 401
+                    return {'message': 'Invalid username or password'}, 401
             else:
-                return jsonify({'message': 'Invalid username or password'}), 401
+                return {'message': 'Invalid username or password'}, 401
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return {'error': str(e)}, 500
 
 
-ns_users = Namespace('api/v1', description='User registration and viewing')
+ns_users = Namespace('api/v1', description='User registration and viewing', authorizations=authorizations)
 
 @ns_users.route('/users')
 class Users(Resource):
+
+    @jwt_required()
+    @ns_users.doc(security='JWT-token')
     @ns_users.marshal_list_with(user_output)
-    #@jwt_required()
     def get(self):
-        #user = get_jwt_identity()
+        user = get_jwt_identity()
         users = db.users.find()
         users = list(users)
 
@@ -115,7 +122,7 @@ class Users(Resource):
     def post(self):
         data = ns_users.payload
         if not validate_user(data):
-            return jsonify({'error': 'Missing required fields'}), 400
+            return {'error': 'Missing required fields'}, 400
 
         username = data.get('username')
         email = data.get('email')
@@ -127,7 +134,7 @@ class Users(Resource):
         try:
             existing_user = db.users.find_one({'$or': [{'username': username, 'email': email}]})
             if existing_user:
-                return jsonify({'error': 'Username or email already exists'}), 400
+                return {'error': 'Username or email already exists'}, 400
 
             user = {
                 'username': username,
@@ -144,11 +151,12 @@ class Users(Resource):
 
 @ns_users.route("/users/<string:user_id>")
 class User(Resource):
-    #@jwt_required()
+    @jwt_required()
+    @ns_users.doc(security='JWT-token')
     @ns_users.marshal_with(user_output)
     @ns_users.doc(params={'user_id': 'User ID'})
     def get(self, user_id):
-        #current_user = get_jwt_identity()
+        current_user = get_jwt_identity()
         try:
             user = db.users.find_one({ "_id": ObjectId(user_id) })
             if user:
@@ -159,26 +167,72 @@ class User(Resource):
             return {'error': str(e)}, 404
 
 
-ns_expenses = Namespace('api/v1', description='Expenses')
+    @jwt_required()
+    @ns_users.doc(security='JWT-token')
+    @ns_users.expect(user_model)
+    @ns_users.doc(params={'user_id': 'User ID'})
+    def put(self, user_id):
+
+        auth_user_id = get_jwt_identity()
+        data = ns_users.payload
+        if not validate_user(data):
+            return {'error': 'Missing required fields'}, 400
+
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+        try:
+            updated = db.users.update_one({ "_id": ObjectId(user_id)},
+                {'$set': {'username': username, 'email': email,
+                    'password': hashed_password}}
+                )
+            if updated.modified_count == 1:
+                return {'message': 'User updated successfully'}, 200
+            else:
+                return {"error": "User not found or failed to update" }, 404
+        except Exception as e:
+            return {'error': str(e)}, 404
+
+
+    @jwt_required()
+    @ns_users.doc(security='JWT-token')
+    @ns_users.doc(params={'user_id': 'User ID'})
+    def delete(self, user_id):
+        auth_user_id = get_jwt_identity()
+        try:
+            deleted = db.users.delete_one({ "_id": ObjectId(user_id) })
+            if deleted.deleted_count == 1:
+                return {'message': 'User deleted successfully'}, 200
+            else:
+                return {"error": "User not found or failed to delete" }, 404
+        except Exception as e:
+            return {'error': str(e)}, 404
+
+
+ns_expenses = Namespace('api/v1', description='Expenses', authorizations=authorizations)
 
 @ns_expenses.route("/expenses")
 class Expenses(Resource):
-    @ns_expenses.expect(expense_model)
     @jwt_required()
+    @ns_expenses.doc(security='JWT-token')
+    @ns_expenses.expect(expense_model)
     def post(self):
         data = ns_expenses.payload
-        if validate_expense(data):
-            return jsonify({'error': 'Missing required fields'}), 400
+        if not validate_expense(data):
+            return {'error': 'Missing required fields'}, 400
 
         description = data.get('description')
         amount = data.get('amount')
-        category = request.get('category')
+        category = data.get('category')
         date = data.get('date')
 
         try:
             date = datetime.fromisoformat(date)
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return {'error': str(e)}, 500
     
         user_id = get_jwt_identity()
         expense = {
@@ -191,15 +245,16 @@ class Expenses(Resource):
             }
         try:
             db.expenses.insert_one(expense)
-            return jsonify({ 'message': 'Expense added successfully' }), 200
+            return { 'message': 'Expense added successfully' }, 200
         except Exception:
-            return jsonify({ 'error': str(e)}), 500
+            return { 'error': str(e)}, 500
 
 
-    #@jwt_required()
+    @jwt_required()
+    @ns_expenses.doc(security='JWT-token')
     @ns_expenses.marshal_list_with(expense_output)
     def get(self):
-        #user_id = get_jwt_identity()
+        user_id = get_jwt_identity()
 
         try:
             expenses = db.expenses.find()
@@ -207,26 +262,30 @@ class Expenses(Resource):
 
             return expenses, 200
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return {'error': str(e)}, 500
 
 
 @ns_expenses.route("/expenses/<string:expense_id>")
 class Expense(Resource):
-    @ns_expenses.expect(expense_model)
     @jwt_required()
+    @ns_expenses.expect(expense_model)
+    @ns_expenses.doc(security='JWT-token')
     def put(self, expense_id):
         user = get_jwt_identity()
 
-        data = request.json()
+        data = ns_expenses.payload
+        if not validate_expense(data):
+            return {'error': 'Missing required fields'}, 400
+
         description = data.get('description')
         amount = data.get('amount')
-        category = request.get('category')
+        category = data.get('category')
         date = data.get('date')
 
         try:
             date = datetime.fromisoformat(date)
         except Exception as e:
-            return jsonify({ 'error': str(e) }), 500
+            return { 'error': str(e) }, 500
 
         update = db.expenses.update_one(
                 {'_id': ObjectId(expense_id), 'user_id': ObjectId(user)},
@@ -234,29 +293,46 @@ class Expense(Resource):
                     'category':category, 'date': date}}
                 )
         if update.modified_count == 1:
-            return jsonify({ 'message': 'Updated successfully' }), 200
+            return { 'message': 'Updated successfully' }, 200
         else:
-            return jsonify({'error': 'expense not found or failed to update'}), 404
+            return {'error': 'expense not found or failed to update'}, 404
 
 
     @jwt_required()
+    @ns_expenses.doc(security='JWT-token')
     def delete(self, expense_id):
         user = get_jwt_identity()
 
         deleted = db.expenses.delete_one({'_id': ObjectId(expense_id), 'user_id': ObjectId(user)})
 
         if deleted.deleted_count == 1:
-            return jsonify({'message': 'Expense deleted successfuly'}), 200
+            return {'message': 'Expense deleted successfuly'}, 200
         else:
-            return jsonify({'error': 'Expense not found or failed to delete'}), 404
+            return {'error': 'Expense not found or failed to delete'}, 404
+
+
+    @jwt_required()
+    @ns_expenses.doc(security='JWT-token')
+    @ns_expenses.marshal_with(expense_output)
+    def get(self, expense_id):
+        user_id = get_jwt_identity()
+        try:
+            expense = db.expenses.find_one({'_id': ObjectId(expense_id)})
+            if expense:
+                return expense, 200
+            else:
+                return {'error': 'Expense not found'}, 404
+        except Exception as e:
+            return {'error': str(e)}, 500
 
 
 @ns_expenses.route("/expenses/filter")
 class ExpenseFilter(Resource):
     @jwt_required()
+    @ns_expenses.doc(security='JWT-token')
     @ns_expenses.marshal_list_with(expense_output)
     def get(self):
-        #user_id = get_jwt_identity()
+        user_id = get_jwt_identity()
         filters = request.args.to_dict()
 
         try:
@@ -265,7 +341,28 @@ class ExpenseFilter(Resource):
 
             return expenses, 200
         except Exception:
-            return jsonify({'error': str(e)}), 500
+            return {'error': str(e)}, 500
+
+
+@ns_expenses.route("/expenses/<string:user_id>")
+class UserExpenses(Resource):
+    @jwt_required()
+    @ns_expenses.doc(security='JWT-token')
+    @ns_expenses.doc(params={'user_id': 'User Id'})
+    @ns_expenses.marshal_list_with(expense_output)
+    def get(self, user_id):
+        user = get_jwt_identity()
+
+        try:
+            expenses = db.expenses.find({'user_id': ObjectId(user_id)})
+            expenses = list(expenses)
+
+            if expenses:
+                return expenses, 200
+            else:
+                abort(404, 'User has no expenses')
+        except Exception:
+            return {'error': str(e)}, 500
 
 
 api.add_namespace(ns_auth)
