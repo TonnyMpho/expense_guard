@@ -1,3 +1,4 @@
+""" Expense tracker API """
 from flask import Flask, request, jsonify, abort
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from flask_restx import Api, Resource, Namespace, fields
@@ -22,6 +23,7 @@ db = mongo['expense_tracker']
 
 
 def validate_user(data):
+    """ method for validating user input """
     required = ['username', 'email', 'password']
     for field in required:
         if field not in data:
@@ -29,19 +31,21 @@ def validate_user(data):
     return True
 
 def validate_expense(data):
+    """ method for validating expense input """
     required = ['decscription', 'amount', 'category', 'date']
     for field in required:
         if field not in data:
             return False
     return True
 
-
+# User model
 user_model = api.model('User', {
     'username': fields.String(reqiured=True),
     'email': fields.String(required=True),
     'password': fields.String(required=True),
 })
 
+# what the user output should include
 user_output = api.model('User_out', {
     '_id': fields.String,
     'username': fields.String,
@@ -49,6 +53,7 @@ user_output = api.model('User_out', {
     'created_at': fields.DateTime,
 })
 
+# Expense model
 expense_model = api.model('Expense', {
     'description': fields.String,
     'amount': fields.Float,
@@ -56,6 +61,7 @@ expense_model = api.model('Expense', {
     'date': fields.DateTime,
 })
 
+# what the output should include
 expense_output = api.model('Expense_output', {
     '_id': fields.String,
     'user_id': fields.String,
@@ -65,6 +71,7 @@ expense_output = api.model('Expense_output', {
     'date': fields.DateTime,
 })
 
+# Athorization for swagger documentation
 authorizations = {
         'JWT-token': {
             'type': 'apiKey',
@@ -75,6 +82,7 @@ authorizations = {
 
 ns_auth = Namespace('api/v1', decription='Authorization')
 
+# login input model
 login_input = api.model('login_input', {
     'username': fields.String(required=True),
     'password': fields.String(required=True),
@@ -86,8 +94,12 @@ login_input = api.model('login_input', {
 
 @ns_auth.route('/auth')
 class Authorization(Resource):
+    """ class for authorization """
+
     @ns_auth.expect(login_input)
     def post(self):
+        """ method/route for authorization """
+
         data = ns_auth.payload
         username = data.get('username')
         password = data.get('password')
@@ -112,11 +124,14 @@ ns_users = Namespace('api/v1', description='User registration and viewing', auth
 
 @ns_users.route('/users')
 class Users(Resource):
+    """ class for users """
 
     @jwt_required()
     @ns_users.doc(security='JWT-token')
     @ns_users.marshal_list_with(user_output)
     def get(self):
+        """ method/route for fecthing all users """
+
         user = get_jwt_identity()
         users = db.users.find()
         users = list(users)
@@ -125,6 +140,8 @@ class Users(Resource):
 
     @ns_users.expect(user_model)
     def post(self):
+        """ method/route for inserting a new user """
+
         data = ns_users.payload
         if not validate_user(data):
             return {'error': 'Missing required fields'}, 400
@@ -156,11 +173,15 @@ class Users(Resource):
 
 @ns_users.route("/users/<string:user_id>")
 class User(Resource):
+    """ class user """
+
     @jwt_required()
     @ns_users.doc(security='JWT-token')
     @ns_users.marshal_with(user_output)
     @ns_users.doc(params={'user_id': 'User ID'})
     def get(self, user_id):
+        """ method/route for querying/fetching a user based on an ID """
+
         current_user = get_jwt_identity()
         try:
             user = db.users.find_one({ "_id": ObjectId(user_id) })
@@ -177,6 +198,7 @@ class User(Resource):
     @ns_users.expect(user_model)
     @ns_users.doc(params={'user_id': 'User ID'})
     def put(self, user_id):
+        """ method/route for updating a user """
 
         auth_user_id = get_jwt_identity()
         data = ns_users.payload
@@ -206,6 +228,7 @@ class User(Resource):
     @ns_users.doc(security='JWT-token')
     @ns_users.doc(params={'user_id': 'User ID'})
     def delete(self, user_id):
+        """ method/route for deleting a user """
         auth_user_id = get_jwt_identity()
         try:
             deleted = db.users.delete_one({ "_id": ObjectId(user_id) })
@@ -221,10 +244,14 @@ ns_expenses = Namespace('api/v1', description='Expenses', authorizations=authori
 
 @ns_expenses.route("/expenses")
 class Expenses(Resource):
+    """ Expenses class """
+
     @jwt_required()
     @ns_expenses.doc(security='JWT-token')
     @ns_expenses.expect(expense_model)
     def post(self):
+        """ method/route for inserting an expense """
+
         data = ns_expenses.payload
         if not validate_expense(data):
             return {'error': 'Missing required fields'}, 400
@@ -259,6 +286,8 @@ class Expenses(Resource):
     @ns_expenses.doc(security='JWT-token')
     @ns_expenses.marshal_list_with(expense_output)
     def get(self):
+        """ method/route for fetching all expenses """
+
         user_id = get_jwt_identity()
 
         try:
@@ -272,10 +301,14 @@ class Expenses(Resource):
 
 @ns_expenses.route("/expenses/<string:expense_id>")
 class Expense(Resource):
+    """ class expense """
+
     @jwt_required()
     @ns_expenses.expect(expense_model)
     @ns_expenses.doc(security='JWT-token')
     def put(self, expense_id):
+        """ method/route for updating an expense """
+
         user = get_jwt_identity()
 
         data = ns_expenses.payload
@@ -306,6 +339,8 @@ class Expense(Resource):
     @jwt_required()
     @ns_expenses.doc(security='JWT-token')
     def delete(self, expense_id):
+        """ method/route for deleting an expense """
+
         user = get_jwt_identity()
 
         deleted = db.expenses.delete_one({'_id': ObjectId(expense_id), 'user_id': ObjectId(user)})
@@ -320,6 +355,8 @@ class Expense(Resource):
     @ns_expenses.doc(security='JWT-token')
     @ns_expenses.marshal_with(expense_output)
     def get(self, expense_id):
+        """ method for fetching an expense """
+
         user_id = get_jwt_identity()
         try:
             expense = db.expenses.find_one({'_id': ObjectId(expense_id)})
@@ -333,10 +370,14 @@ class Expense(Resource):
 
 @ns_expenses.route("/expenses/filter")
 class ExpenseFilter(Resource):
+    """ Expense filter class """
+
     @jwt_required()
     @ns_expenses.doc(security='JWT-token')
     @ns_expenses.marshal_list_with(expense_output)
     def get(self):
+        """ method/route for querying expenses based on a filter """
+
         user_id = get_jwt_identity()
         filters = request.args.to_dict()
 
@@ -351,11 +392,14 @@ class ExpenseFilter(Resource):
 
 @ns_expenses.route("/expenses/<string:user_id>")
 class UserExpenses(Resource):
+    """ class """
+
     @jwt_required()
     @ns_expenses.doc(security='JWT-token')
     @ns_expenses.doc(params={'user_id': 'User Id'})
     @ns_expenses.marshal_list_with(expense_output)
     def get(self, user_id):
+        """ method/route for fetching expenses based on a User ID """
         user = get_jwt_identity()
 
         try:
