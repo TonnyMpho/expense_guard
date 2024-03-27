@@ -11,6 +11,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = '7eed3b8d-b4a8-4aa5-bc9c-dc0eea04ac33' # used uuid
 app.config["JWT_SECRET_KEY"] = '7eed3b8d-b4a8-4aa5-bc9c-dc0eea04ac33'
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(days=1)
+app.config['PROPAGATE_EXCEPTIONS'] = True
 
 jwt = JWTManager(app)
 api = Api(app, version='1.0', title='API - Expense Guard',
@@ -78,6 +79,10 @@ login_input = api.model('login_input', {
     'username': fields.String(required=True),
     'password': fields.String(required=True),
 })
+#@api.errorhandler(jwt_extended_exception.NoAuthorizationError)
+#def handle_auth_error(e):
+#    return {'message': str(e)}, 401
+
 
 @ns_auth.route('/auth')
 class Authorization(Resource):
