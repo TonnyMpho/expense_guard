@@ -12,7 +12,7 @@ The Expense Tracker API is a RESTful web service designed to help users manage t
 
 ### Technologies Used
 
--- Flask: A micro web framework for building APIs in Python.
+- Flask: A micro web framework for building APIs in Python.
 - MongoDB: A NoSQL database used for storing user and expense data.
 - Flask-JWT-Extended: For user authentication and authorization using JSON Web Tokens (JWT).
 - bcrypt: A library for hashing passwords securely.
@@ -23,12 +23,12 @@ The Expense Tracker API is a RESTful web service designed to help users manage t
 1. Clone the repository to your local machine:
 
 ```
-git clone https://github.com/your-username/expense-tracker-api.git
+git clone https://github.com/TonnyMpho/expense_guard.git
 ```
 
 2. Navigate to the project directory:
 ```
-cd expense-tracker-api
+cd expense_guard
 ```
 
 3. Install the required dependencies using pip:
@@ -56,4 +56,4 @@ Contributions are welcome! If you have any suggestions, improvements, or feature
 
 ### License
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](https://mit-license.org/).
