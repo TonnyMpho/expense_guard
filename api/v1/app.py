@@ -18,7 +18,7 @@ jwt = JWTManager(app)
 api = Api(app, version='1.0', title='API - Expense Guard',
         decription='API for expense tracker')
 
-mongo = MongoClient("mongodb://192.168.56.1:27017")
+mongo = MongoClient("mongodb://127.0.0.1:27017")
 db = mongo['expense_tracker']
 
 
@@ -32,7 +32,7 @@ def validate_user(data):
 
 def validate_expense(data):
     """ method for validating expense input """
-    required = ['decscription', 'amount', 'category', 'date']
+    required = ['description', 'amount', 'category', 'date']
     for field in required:
         if field not in data:
             return False
@@ -261,10 +261,6 @@ class Expenses(Resource):
         category = data.get('category')
         date = data.get('date')
 
-        try:
-            date = datetime.fromisoformat(date)
-        except Exception as e:
-            return {'error': str(e)}, 500
     
         user_id = get_jwt_identity()
         expense = {
@@ -390,7 +386,7 @@ class ExpenseFilter(Resource):
             return {'error': str(e)}, 500
 
 
-@ns_expenses.route("/expenses/<string:user_id>")
+@ns_expenses.route("/expenses/user/<string:user_id>")
 class UserExpenses(Resource):
     """ class """
 
@@ -410,8 +406,8 @@ class UserExpenses(Resource):
                 return expenses, 200
             else:
                 abort(404, 'User has no expenses')
-        except Exception:
-            return {'error': str(e)}, 500
+        except Exception as e:
+            abort(404, 'User has no expenses or no found')
 
 
 api.add_namespace(ns_auth)
