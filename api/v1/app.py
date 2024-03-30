@@ -98,7 +98,7 @@ class Authorization(Resource):
 
     @ns_auth.expect(login_input)
     def post(self):
-        """ method/route for authorization """
+        """ route for authorization """
 
         data = ns_auth.payload
         username = data.get('username')
@@ -130,7 +130,7 @@ class Users(Resource):
     @ns_users.doc(security='JWT-token')
     @ns_users.marshal_list_with(user_output)
     def get(self):
-        """ method/route for fecthing all users """
+        """ route for fecthing all users """
 
         user = get_jwt_identity()
         users = db.users.find()
@@ -140,7 +140,7 @@ class Users(Resource):
 
     @ns_users.expect(user_model)
     def post(self):
-        """ method/route for inserting a new user """
+        """ route for inserting a new user """
 
         data = ns_users.payload
         if not validate_user(data):
@@ -180,7 +180,7 @@ class User(Resource):
     @ns_users.marshal_with(user_output)
     @ns_users.doc(params={'user_id': 'User ID'})
     def get(self, user_id):
-        """ method/route for querying/fetching a user based on an ID """
+        """ route for querying/fetching a user based on an ID """
 
         current_user = get_jwt_identity()
         try:
@@ -198,7 +198,7 @@ class User(Resource):
     @ns_users.expect(user_model)
     @ns_users.doc(params={'user_id': 'User ID'})
     def put(self, user_id):
-        """ method/route for updating a user """
+        """ route for updating a user """
 
         auth_user_id = get_jwt_identity()
         data = ns_users.payload
@@ -228,7 +228,7 @@ class User(Resource):
     @ns_users.doc(security='JWT-token')
     @ns_users.doc(params={'user_id': 'User ID'})
     def delete(self, user_id):
-        """ method/route for deleting a user """
+        """ route for deleting a user """
         auth_user_id = get_jwt_identity()
         try:
             deleted = db.users.delete_one({ "_id": ObjectId(user_id) })
@@ -250,7 +250,7 @@ class Expenses(Resource):
     @ns_expenses.doc(security='JWT-token')
     @ns_expenses.expect(expense_model)
     def post(self):
-        """ method/route for inserting an expense """
+        """ route for inserting an expense """
 
         data = ns_expenses.payload
         if not validate_expense(data):
@@ -282,7 +282,7 @@ class Expenses(Resource):
     @ns_expenses.doc(security='JWT-token')
     @ns_expenses.marshal_list_with(expense_output)
     def get(self):
-        """ method/route for fetching all expenses """
+        """ route for fetching all expenses """
 
         user_id = get_jwt_identity()
 
@@ -303,7 +303,7 @@ class Expense(Resource):
     @ns_expenses.expect(expense_model)
     @ns_expenses.doc(security='JWT-token')
     def put(self, expense_id):
-        """ method/route for updating an expense """
+        """ route for updating an expense """
 
         user = get_jwt_identity()
 
@@ -335,7 +335,7 @@ class Expense(Resource):
     @jwt_required()
     @ns_expenses.doc(security='JWT-token')
     def delete(self, expense_id):
-        """ method/route for deleting an expense """
+        """ route for deleting an expense """
 
         user = get_jwt_identity()
 
@@ -351,7 +351,7 @@ class Expense(Resource):
     @ns_expenses.doc(security='JWT-token')
     @ns_expenses.marshal_with(expense_output)
     def get(self, expense_id):
-        """ method for fetching an expense """
+        """ route for fetching an expense """
 
         user_id = get_jwt_identity()
         try:
@@ -372,7 +372,7 @@ class ExpenseFilter(Resource):
     @ns_expenses.doc(security='JWT-token')
     @ns_expenses.marshal_list_with(expense_output)
     def get(self):
-        """ method/route for querying expenses based on a filter """
+        """ route for querying expenses based on a filter """
 
         user_id = get_jwt_identity()
         filters = request.args.to_dict()
@@ -395,7 +395,7 @@ class UserExpenses(Resource):
     @ns_expenses.doc(params={'user_id': 'User Id'})
     @ns_expenses.marshal_list_with(expense_output)
     def get(self, user_id):
-        """ method/route for fetching expenses based on a User ID """
+        """ route for fetching expenses based on a User ID """
         user = get_jwt_identity()
 
         try:
